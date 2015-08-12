@@ -19,6 +19,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.net.URLDecoder;
 
 /**
  *
@@ -30,28 +31,34 @@ public class HtmlQuery {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        String contentFileName = "entranceContent.txt";
-        String errorFileName = "entranceErrContent.txt";
+        String contentFileName = "E:/maps/entranceContent.txt";
+        String errorFileName = "E:/maps/entranceErrContent.txt";
         String encoding = "gb2312";
         String rootUrl = "http://www.royal-canin.cn/mapsales/index.php";
         truncateFileByName(contentFileName);//防止因为多次运行该程序导致数据重复
         truncateFileByName(errorFileName);//防止因为多次运行该程序导致数据重复
         HttpUtil.httpGet(rootUrl, encoding, contentFileName, errorFileName, true);//获取入口内容(这个html中包含所有的二级文件入口链接)
 
-        String urlListFileName = "E:/urlList.txt";
+        String urlListFileName = "E:/maps/urlList.txt";
         truncateFileByName(urlListFileName);//防止因为多次运行该程序导致数据重复
         getRealUrlList(contentFileName, encoding, rootUrl, urlListFileName);//根据入口文件内容获取所有的二级文件链接，为下一步做准备
 
         List<String> list = ReadFromFile.readFileByLines(urlListFileName, encoding);
-        String areaListAllInOne = "areaList.txt";
+        String areaListAllInOne = "E:/maps/areaList.txt";
+        String nonShopList = "E:/maps/nonShopList.txt";
         truncateFileByName(areaListAllInOne);//防止因为多次运行该程序导致数据重复
         list.stream().forEach((url) -> {
             try {
                 String content = HttpUtil.httpGet(url, encoding, contentFileName, errorFileName, false);//当前地区的完整html内容
+                if (content.startsWith("<script") && url.endsWith("%CA%D0")) {
+                    url = url.replace("%CA%D0", "");
+                    content = HttpUtil.httpGet(url, encoding, contentFileName, errorFileName, false);//当前地区的完整html内容
+                }
+                
                 String areaName = findAreaNameByUrl(url);//当前地区名字
                 String finalAreaName = java.net.URLDecoder.decode(areaName, encoding);
-                String currentAreaShopListFileName = "E:/" + finalAreaName + ".txt";
-                truncateFileByName(urlListFileName);//防止因为多次运行该程序导致数据重复
+                String currentAreaShopListFileName = "E:/maps/" + finalAreaName + ".txt";
+//                truncateFileByName(urlListFileName);//防止因为多次运行该程序导致数据重复
                 if (!content.startsWith("<script")) {//没有报错 包含需要找的店铺地址
                     List<String> shopList = findShopListByContent(content);//根据html获取shopList
                     FileUtils.appendMethodA(areaListAllInOne, areaName + "================\r\n");
@@ -59,6 +66,8 @@ public class HtmlQuery {
                         FileUtils.appendMethodA(areaListAllInOne, shop + "\r\n");
                         FileUtils.appendMethodA(currentAreaShopListFileName, shop + "\r\n");
                     });
+                } else {
+                    FileUtils.appendMethodA(nonShopList, url + "\r\n");
                 }
             } catch (UnsupportedEncodingException ex) {
                 Logger.getLogger(HtmlQuery.class.getName()).log(Level.SEVERE, null, ex);
@@ -98,7 +107,11 @@ public class HtmlQuery {
         Pattern pattern = Pattern.compile(areaPattern);
         Matcher matcher = pattern.matcher(url);
         while (matcher.find()) {
-            return matcher.group(1);
+            try {
+                return URLDecoder.decode(matcher.group(1), "gb2312");
+            } catch (UnsupportedEncodingException ex) {
+                Logger.getLogger(HtmlQuery.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
         return "";
     }
